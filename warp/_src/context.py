@@ -5869,6 +5869,30 @@ class Runtime:
             ]
             self.core.wp_cuda_graph_update_memcpy_batch.restype = ctypes.c_bool
 
+            self.core.wp_cuda_graph_insert_kernel.argtypes = [
+                ctypes.c_void_p,  # context
+                ctypes.c_void_p,  # stream
+                ctypes.c_void_p,  # kernel (CUfunction)
+                ctypes.c_int,  # dim
+                ctypes.c_int,  # max_blocks
+                ctypes.c_int,  # block_dim
+                ctypes.c_int,  # shared_memory_bytes
+                ctypes.POINTER(ctypes.c_void_p),  # args (void**)
+            ]
+            self.core.wp_cuda_graph_insert_kernel.restype = ctypes.c_void_p
+
+            self.core.wp_cuda_graph_exec_update_kernel.argtypes = [
+                ctypes.c_void_p,  # graph_exec
+                ctypes.c_void_p,  # node
+                ctypes.c_void_p,  # kernel (CUfunction)
+                ctypes.c_int,  # dim
+                ctypes.c_int,  # max_blocks
+                ctypes.c_int,  # block_dim
+                ctypes.c_int,  # shared_memory_bytes
+                ctypes.POINTER(ctypes.c_void_p),  # args (void**)
+            ]
+            self.core.wp_cuda_graph_exec_update_kernel.restype = ctypes.c_bool
+
             self.core.wp_cuda_graph_insert_alloc_node.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
             self.core.wp_cuda_graph_insert_alloc_node.restype = ctypes.c_void_p
             self.core.wp_cuda_graph_insert_free_node.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
@@ -8577,6 +8601,13 @@ class Launch:
         self.adjoint: bool = adjoint
         """Whether to run the adjoint kernel instead of the forward kernel."""
 
+        self.graph_node: ctypes.c_void_p | None = None
+        """Handle to the CUDA graph node created when this launch is recorded during graph capture.
+
+        Populated by :meth:`launch` when issued on a capturing stream, and consumed by
+        :meth:`update_graph_exec` to patch the kernel parameters of the instantiated graph.
+        """
+
     def set_dim(self, dim: int | list[int] | tuple[int, ...]):
         """Set the launch dimensions.
 
@@ -8692,36 +8723,91 @@ class Launch:
 
             # If the stream is capturing, we retain the CUDA module so that it doesn't get unloaded
             # before the captured graph is released.
-            if len(runtime.captures) > 0 and runtime.core.wp_cuda_stream_is_capturing(stream.cuda_stream):
+            capturing = len(runtime.captures) > 0 and runtime.core.wp_cuda_stream_is_capturing(stream.cuda_stream)
+            if capturing:
                 capture_id = runtime.core.wp_cuda_stream_get_capture_id(stream.cuda_stream)
                 graph = runtime.captures.get(capture_id)
                 if graph is not None:
                     graph._retain_module_exec(self.module_exec)
 
+            # select the forward or adjoint kernel and its dynamic shared-memory size
             if self.adjoint:
-                runtime.core.wp_cuda_launch_kernel(
+                func, smem_bytes = self.hooks.backward, self.hooks.backward_smem_bytes
+            else:
+                func, smem_bytes = self.hooks.forward, self.hooks.forward_smem_bytes
+
+            if capturing:
+                # explicitly add the kernel node to the captured graph so we get its handle directly;
+                # this records it into the graph and lets update_graph_exec() patch its params later
+                self.graph_node = runtime.core.wp_cuda_graph_insert_kernel(
                     self.device.context,
-                    self.hooks.backward,
+                    stream.cuda_stream,
+                    func,
                     self.bounds.size,
                     self.max_blocks,
                     self.block_dim,
-                    self.hooks.backward_smem_bytes,
+                    smem_bytes,
                     self.params_addr,
-                    stream.cuda_stream,
-                    None,  # apic_info: replayed launches don't re-record
                 )
             else:
                 runtime.core.wp_cuda_launch_kernel(
                     self.device.context,
-                    self.hooks.forward,
+                    func,
                     self.bounds.size,
                     self.max_blocks,
                     self.block_dim,
-                    self.hooks.forward_smem_bytes,
+                    smem_bytes,
                     self.params_addr,
                     stream.cuda_stream,
                     None,  # apic_info: replayed launches don't re-record
                 )
+
+    def update_graph_exec(self, graph: Graph) -> None:
+        """Apply this launch's current parameters to an instantiated (captured) graph.
+
+        Record the launch during capture by calling :meth:`launch` on a capturing stream, then,
+        after the graph has been instantiated by :func:`wp.capture_end`, change argument values
+        with :meth:`set_param_at_index` (or the related setters) and call this method to patch the
+        kernel node in place. The next :func:`wp.capture_launch` replay uses the new parameters
+        without re-capturing the graph.
+
+        Args:
+            graph: The :class:`Graph` returned by :func:`wp.capture_end` into which this launch
+                was recorded.
+
+        Raises:
+            RuntimeError: If the launch targets the CPU, was not recorded into a captured graph,
+                the graph has not been instantiated, or the runtime fails to update the node.
+        """
+        if self.device.is_cpu:
+            raise RuntimeError("update_graph_exec() is only supported for CUDA graphs")
+
+        if self.graph_node is None:
+            raise RuntimeError(
+                "This launch was not recorded into a captured graph; call launch() on a capturing "
+                "stream before update_graph_exec()."
+            )
+
+        if graph.graph_exec is None:
+            raise RuntimeError("The graph has not been instantiated (graph_exec is None).")
+
+        # patch the same kernel (forward or adjoint) that was recorded into the node
+        if self.adjoint:
+            func, smem_bytes = self.hooks.backward, self.hooks.backward_smem_bytes
+        else:
+            func, smem_bytes = self.hooks.forward, self.hooks.forward_smem_bytes
+
+        if not runtime.core.wp_cuda_graph_exec_update_kernel(
+            graph.graph_exec,
+            self.graph_node,
+            func,
+            self.bounds.size,
+            self.max_blocks,
+            self.block_dim,
+            smem_bytes,
+            self.params_addr,
+        ):
+            raise RuntimeError(f"Failed to update kernel node parameters: {runtime.get_error_string()}")
 
 
 def _canonicalize_dim(dim: int | Sequence[int]) -> tuple[int, ...]:

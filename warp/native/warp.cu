@@ -3566,6 +3566,119 @@ bool wp_cuda_graph_update_memcpy_batch(
     return true;
 }
 
+void* wp_cuda_graph_insert_kernel(
+    void* context,
+    void* stream,
+    void* kernel,
+    int dim,
+    int max_blocks,
+    int block_dim,
+    int shared_memory_bytes,
+    void** args
+)
+{
+    ContextGuard guard(context);
+
+    CUstream cuda_stream = static_cast<CUstream>(stream);
+
+    // Get the current stream capturing graph
+    CUstreamCaptureStatus capture_status = CU_STREAM_CAPTURE_STATUS_NONE;
+    cudaGraph_t graph = NULL;
+    const cudaGraphNode_t* capture_deps = NULL;
+    size_t dep_count = 0;
+    if (!check_cu(cuStreamGetCaptureInfo_f(cuda_stream, &capture_status, nullptr, &graph, &capture_deps, &dep_count)))
+        return NULL;
+
+    // abort if not capturing
+    if (!graph || capture_status != CU_STREAM_CAPTURE_STATUS_ACTIVE) {
+        wp::set_error_string("Stream is not capturing");
+        return NULL;
+    }
+
+    // compute the grid dimension exactly as wp_cuda_launch_kernel() does
+    if (block_dim <= 0)
+        block_dim = 256;
+
+    int grid_dim = (dim + block_dim - 1) / block_dim;
+
+    if (max_blocks <= 0)
+        max_blocks = 2147483647;
+
+    if (grid_dim < 0)
+        grid_dim = max_blocks;
+    else if (grid_dim > max_blocks)
+        grid_dim = max_blocks;
+
+    CUDA_KERNEL_NODE_PARAMS params = {};
+    params.func = static_cast<CUfunction>(kernel);
+    params.gridDimX = grid_dim;
+    params.gridDimY = 1;
+    params.gridDimZ = 1;
+    params.blockDimX = block_dim;
+    params.blockDimY = 1;
+    params.blockDimZ = 1;
+    params.sharedMemBytes = shared_memory_bytes;
+    params.kernelParams = args;
+    params.extra = NULL;
+
+    // explicitly add the kernel node so we get its handle directly (rather than launching implicitly
+    // and reading the capture frontier), then splice it into the capture as the new dependency
+    CUgraphNode node = NULL;
+    if (!check_cu(cuGraphAddKernelNode_f(&node, graph, capture_deps, dep_count, &params)))
+        return NULL;
+
+    if (!check_cu(cuStreamUpdateCaptureDependencies_f(cuda_stream, &node, 1, cudaStreamSetCaptureDependencies)))
+        return NULL;
+
+    return node;
+}
+
+bool wp_cuda_graph_exec_update_kernel(
+    void* graph_exec,
+    void* node,
+    void* kernel,
+    int dim,
+    int max_blocks,
+    int block_dim,
+    int shared_memory_bytes,
+    void** args
+)
+{
+    // compute the grid dimension exactly as wp_cuda_launch_kernel() does, so the updated node
+    // matches what an equivalent launch would produce
+    if (block_dim <= 0)
+        block_dim = 256;
+
+    int grid_dim = (dim + block_dim - 1) / block_dim;
+
+    if (max_blocks <= 0)
+        max_blocks = 2147483647;
+
+    if (grid_dim < 0)
+        grid_dim = max_blocks;
+    else if (grid_dim > max_blocks)
+        grid_dim = max_blocks;
+
+    CUDA_KERNEL_NODE_PARAMS params = {};
+    params.func = static_cast<CUfunction>(kernel);
+    params.gridDimX = grid_dim;
+    params.gridDimY = 1;
+    params.gridDimZ = 1;
+    params.blockDimX = block_dim;
+    params.blockDimY = 1;
+    params.blockDimZ = 1;
+    params.sharedMemBytes = shared_memory_bytes;
+    params.kernelParams = args;
+    params.extra = NULL;
+
+    if (!check_cu(cuGraphExecKernelNodeSetParams_f(
+            static_cast<CUgraphExec>(graph_exec), static_cast<CUgraphNode>(node), &params
+        )))
+        return false;
+
+    return true;
+}
+
 void* wp_cuda_graph_insert_alloc_node(void* context, size_t size)
 {
     // This function is used to exercise wp_alloc_device_async() during graph capture

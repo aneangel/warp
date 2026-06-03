@@ -100,6 +100,8 @@ static PFN_cuEventSynchronize_v2000 pfn_cuEventSynchronize;
 // function used to add conditional graph nodes, not available in older CUDA versions
 static PFN_cuGraphAddNode_v12030 pfn_cuGraphAddNode;
 #endif
+static PFN_cuGraphAddKernelNode_v12000 pfn_cuGraphAddKernelNode;
+static PFN_cuGraphExecKernelNodeSetParams_v12000 pfn_cuGraphExecKernelNodeSetParams;
 static PFN_cuGraphNodeGetDependentNodes_v10000 pfn_cuGraphNodeGetDependentNodes;
 static PFN_cuGraphNodeGetType_v10000 pfn_cuGraphNodeGetType;
 static PFN_cuModuleLoadDataEx_v2010 pfn_cuModuleLoadDataEx;
@@ -267,6 +269,8 @@ bool init_cuda_driver()
     if (driver_version >= 12030)
         get_driver_entry_point("cuGraphAddNode", 12030, &(void*&)pfn_cuGraphAddNode);
 #endif
+    get_driver_entry_point("cuGraphAddKernelNode", 12000, &(void*&)pfn_cuGraphAddKernelNode);
+    get_driver_entry_point("cuGraphExecKernelNodeSetParams", 12000, &(void*&)pfn_cuGraphExecKernelNodeSetParams);
     get_driver_entry_point("cuGraphNodeGetDependentNodes", 10000, &(void*&)pfn_cuGraphNodeGetDependentNodes);
     get_driver_entry_point("cuGraphNodeGetType", 10000, &(void*&)pfn_cuGraphNodeGetType);
     get_driver_entry_point("cuModuleLoadDataEx", 2010, &(void*&)pfn_cuModuleLoadDataEx);
@@ -810,6 +814,26 @@ CUresult cuGraphAddNode_f(
         : DRIVER_ENTRY_POINT_ERROR;
 }
 #endif
+
+CUresult cuGraphAddKernelNode_f(
+    CUgraphNode* phGraphNode,
+    CUgraph hGraph,
+    const CUgraphNode* dependencies,
+    size_t numDependencies,
+    const CUDA_KERNEL_NODE_PARAMS* nodeParams
+)
+{
+    return pfn_cuGraphAddKernelNode
+        ? pfn_cuGraphAddKernelNode(phGraphNode, hGraph, dependencies, numDependencies, nodeParams)
+        : DRIVER_ENTRY_POINT_ERROR;
+}
+
+CUresult
+cuGraphExecKernelNodeSetParams_f(CUgraphExec hGraphExec, CUgraphNode hNode, const CUDA_KERNEL_NODE_PARAMS* nodeParams)
+{
+    return pfn_cuGraphExecKernelNodeSetParams ? pfn_cuGraphExecKernelNodeSetParams(hGraphExec, hNode, nodeParams)
+                                              : DRIVER_ENTRY_POINT_ERROR;
+}
 
 CUresult cuGraphNodeGetDependentNodes_f(CUgraphNode hNode, CUgraphNode* dependentNodes, size_t* numDependentNodes)
 {

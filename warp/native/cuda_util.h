@@ -118,6 +118,15 @@ CUresult cuGraphAddNode_f(
     CUgraphNodeParams* nodeParams
 );
 #endif
+CUresult cuGraphAddKernelNode_f(
+    CUgraphNode* phGraphNode,
+    CUgraph hGraph,
+    const CUgraphNode* dependencies,
+    size_t numDependencies,
+    const CUDA_KERNEL_NODE_PARAMS* nodeParams
+);
+CUresult
+cuGraphExecKernelNodeSetParams_f(CUgraphExec hGraphExec, CUgraphNode hNode, const CUDA_KERNEL_NODE_PARAMS* nodeParams);
 CUresult cuGraphNodeGetDependentNodes_f(CUgraphNode hNode, CUgraphNode* dependentNodes, size_t* numDependentNodes);
 CUresult cuGraphNodeGetType_f(CUgraphNode hNode, CUgraphNodeType* type);
 CUresult cuModuleUnload_f(CUmodule hmod);

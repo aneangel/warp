@@ -515,6 +515,26 @@ WP_API bool wp_cuda_graph_update_memcpy(void* graph_exec, void* node, void* dst,
 WP_API bool wp_cuda_graph_update_memcpy_batch(
     void* graph_exec, void** nodes, void** dsts, void** srcs, size_t* sizes, int* kinds, int count
 );
+WP_API void* wp_cuda_graph_insert_kernel(
+    void* context,
+    void* stream,
+    void* kernel,
+    int dim,
+    int max_blocks,
+    int block_dim,
+    int shared_memory_bytes,
+    void** args
+);
+WP_API bool wp_cuda_graph_exec_update_kernel(
+    void* graph_exec,
+    void* node,
+    void* kernel,
+    int dim,
+    int max_blocks,
+    int block_dim,
+    int shared_memory_bytes,
+    void** args
+);
 
 WP_API void* wp_cuda_graph_insert_alloc_node(void* context, size_t size);
 WP_API void* wp_cuda_graph_insert_free_node(void* context, void* alloc_node);
