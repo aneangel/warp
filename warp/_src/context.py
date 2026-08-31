@@ -10469,13 +10469,6 @@ def pack_arg(kernel, arg_type, arg_name, value, device, adjoint=False):
             # wrapped in an indexedarray_t with no indices; the adjoint kernel
             # accumulates at indices already remapped through the forward argument.
             if adjoint and warp._src.types.matches_array_class(arg_type, warp.indexedarray):
-                # match indexedarray.grad: without dedicated multi-dimensional adjoints
-                # the adjoint kernel would match the no-op generic adj_address and
-                # silently produce zero gradients
-                if arg_type.ndim > 1:
-                    raise NotImplementedError(
-                        "Gradient propagation through indexed arrays is only supported for 1-D indexed arrays"
-                    )
                 if isinstance(value, warp.array):
                     return warp._src.types.indexedarray_t(value, [None] * value.ndim, value.shape)
 
