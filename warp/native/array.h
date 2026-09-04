@@ -1361,6 +1361,9 @@ adj_address(const indexedarray_t<T>& buf, int i, const array_t<T>& adj_buf, int 
     else if (buf.arr.grad)
         adj_atomic_add(&index_grad(buf.arr, i), adj_output);
 }
+// 2-D/3-D/4-D indexedarray adjoints: same indexedarray_t/array_t CPU-CUDA codegen
+// split as the 1-D overloads above, with each dimension's negative coordinates
+// and optional index remap resolved independently
 template <typename T>
 inline CUDA_CALLABLE void adj_address(
     const indexedarray_t<T>& buf, int i, int j, const indexedarray_t<T>& adj_buf, int adj_i, int adj_j, const T& adj_output
