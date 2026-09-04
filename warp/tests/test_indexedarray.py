@@ -1453,6 +1453,21 @@ def test_indexedarray_grad_3d(test, device):
     expected[[0, 2], :, 1] = 1.0
     assert_np_equal(base.grad.numpy(), expected, tol=1e-6)
 
+    # the manual adjoint launch accepts the base array's gradient as a plain array
+    base.grad.zero_()
+    total.grad.fill_(1.0)
+    wp.launch(
+        kernel_indexedarray_grad_3d,
+        dim=samples.shape,
+        inputs=[samples],
+        outputs=[total],
+        adj_inputs=[base.grad],
+        adj_outputs=[total.grad],
+        adjoint=True,
+        device=device,
+    )
+    assert_np_equal(base.grad.numpy(), expected, tol=1e-6)
+
 
 @wp.kernel
 def kernel_indexedarray_grad_4d(samples: wp.indexedarray4d(dtype=float), total: wp.array(dtype=float)):
@@ -1476,6 +1491,21 @@ def test_indexedarray_grad_4d(test, device):
 
     expected = np.zeros((2, 2, 2, 2), dtype=np.float32)
     expected[1, :, :, :] = 1.0
+    assert_np_equal(base.grad.numpy(), expected, tol=1e-6)
+
+    # the manual adjoint launch accepts the base array's gradient as a plain array
+    base.grad.zero_()
+    total.grad.fill_(1.0)
+    wp.launch(
+        kernel_indexedarray_grad_4d,
+        dim=samples.shape,
+        inputs=[samples],
+        outputs=[total],
+        adj_inputs=[base.grad],
+        adj_outputs=[total.grad],
+        adjoint=True,
+        device=device,
+    )
     assert_np_equal(base.grad.numpy(), expected, tol=1e-6)
 
 
