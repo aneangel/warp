@@ -1361,6 +1361,147 @@ adj_address(const indexedarray_t<T>& buf, int i, const array_t<T>& adj_buf, int 
     else if (buf.arr.grad)
         adj_atomic_add(&index_grad(buf.arr, i), adj_output);
 }
+// 2-D/3-D/4-D indexedarray adjoints: same indexedarray_t/array_t CPU-CUDA codegen
+// split as the 1-D overloads above, with each dimension's negative coordinates
+// and optional index remap resolved independently
+template <typename T>
+inline CUDA_CALLABLE void adj_address(
+    const indexedarray_t<T>& buf, int i, int j, const indexedarray_t<T>& adj_buf, int adj_i, int adj_j, const T& adj_output
+)
+{
+    if (i < 0)
+        i += buf.shape[0];
+    if (j < 0)
+        j += buf.shape[1];
+    if (buf.indices[0])
+        i = buf.indices[0][i];
+    if (buf.indices[1])
+        j = buf.indices[1][j];
+
+    if (adj_buf.arr.data)
+        adj_atomic_add(&index(adj_buf.arr, i, j), adj_output);
+    else if (buf.arr.grad)
+        adj_atomic_add(&index_grad(buf.arr, i, j), adj_output);
+}
+template <typename T>
+inline CUDA_CALLABLE void adj_address(
+    const indexedarray_t<T>& buf, int i, int j, const array_t<T>& adj_buf, int adj_i, int adj_j, const T& adj_output
+)
+{
+    if (i < 0)
+        i += buf.shape[0];
+    if (j < 0)
+        j += buf.shape[1];
+    if (buf.indices[0])
+        i = buf.indices[0][i];
+    if (buf.indices[1])
+        j = buf.indices[1][j];
+
+    if (adj_buf.data)
+        adj_atomic_add(&index(adj_buf, i, j), adj_output);
+    else if (buf.arr.grad)
+        adj_atomic_add(&index_grad(buf.arr, i, j), adj_output);
+}
+template <typename T>
+inline CUDA_CALLABLE void adj_address(
+    const indexedarray_t<T>& buf, int i, int j, int k, const indexedarray_t<T>& adj_buf, int adj_i, int adj_j, int adj_k, const T& adj_output
+)
+{
+    if (i < 0)
+        i += buf.shape[0];
+    if (j < 0)
+        j += buf.shape[1];
+    if (k < 0)
+        k += buf.shape[2];
+    if (buf.indices[0])
+        i = buf.indices[0][i];
+    if (buf.indices[1])
+        j = buf.indices[1][j];
+    if (buf.indices[2])
+        k = buf.indices[2][k];
+
+    if (adj_buf.arr.data)
+        adj_atomic_add(&index(adj_buf.arr, i, j, k), adj_output);
+    else if (buf.arr.grad)
+        adj_atomic_add(&index_grad(buf.arr, i, j, k), adj_output);
+}
+template <typename T>
+inline CUDA_CALLABLE void adj_address(
+    const indexedarray_t<T>& buf, int i, int j, int k, const array_t<T>& adj_buf, int adj_i, int adj_j, int adj_k, const T& adj_output
+)
+{
+    if (i < 0)
+        i += buf.shape[0];
+    if (j < 0)
+        j += buf.shape[1];
+    if (k < 0)
+        k += buf.shape[2];
+    if (buf.indices[0])
+        i = buf.indices[0][i];
+    if (buf.indices[1])
+        j = buf.indices[1][j];
+    if (buf.indices[2])
+        k = buf.indices[2][k];
+
+    if (adj_buf.data)
+        adj_atomic_add(&index(adj_buf, i, j, k), adj_output);
+    else if (buf.arr.grad)
+        adj_atomic_add(&index_grad(buf.arr, i, j, k), adj_output);
+}
+template <typename T>
+inline CUDA_CALLABLE void adj_address(
+    const indexedarray_t<T>& buf, int i, int j, int k, int l, const indexedarray_t<T>& adj_buf, int adj_i, int adj_j, int adj_k, int adj_l, const T& adj_output
+)
+{
+    if (i < 0)
+        i += buf.shape[0];
+    if (j < 0)
+        j += buf.shape[1];
+    if (k < 0)
+        k += buf.shape[2];
+    if (l < 0)
+        l += buf.shape[3];
+    if (buf.indices[0])
+        i = buf.indices[0][i];
+    if (buf.indices[1])
+        j = buf.indices[1][j];
+    if (buf.indices[2])
+        k = buf.indices[2][k];
+    if (buf.indices[3])
+        l = buf.indices[3][l];
+
+    if (adj_buf.arr.data)
+        adj_atomic_add(&index(adj_buf.arr, i, j, k, l), adj_output);
+    else if (buf.arr.grad)
+        adj_atomic_add(&index_grad(buf.arr, i, j, k, l), adj_output);
+}
+template <typename T>
+inline CUDA_CALLABLE void adj_address(
+    const indexedarray_t<T>& buf, int i, int j, int k, int l, const array_t<T>& adj_buf, int adj_i, int adj_j, int adj_k, int adj_l, const T& adj_output
+)
+{
+    if (i < 0)
+        i += buf.shape[0];
+    if (j < 0)
+        j += buf.shape[1];
+    if (k < 0)
+        k += buf.shape[2];
+    if (l < 0)
+        l += buf.shape[3];
+    if (buf.indices[0])
+        i = buf.indices[0][i];
+    if (buf.indices[1])
+        j = buf.indices[1][j];
+    if (buf.indices[2])
+        k = buf.indices[2][k];
+    if (buf.indices[3])
+        l = buf.indices[3][l];
+
+    if (adj_buf.data)
+        adj_atomic_add(&index(adj_buf, i, j, k, l), adj_output);
+    else if (buf.arr.grad)
+        adj_atomic_add(&index_grad(buf.arr, i, j, k, l), adj_output);
+}
 template <typename T>
 inline CUDA_CALLABLE void
 adj_address(const array_t<T>& buf, int i, int j, const array_t<T>& adj_buf, int adj_i, int adj_j, const T& adj_output)
