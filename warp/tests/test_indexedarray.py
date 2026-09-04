@@ -1509,6 +1509,38 @@ def test_indexedarray_grad_4d(test, device):
     assert_np_equal(base.grad.numpy(), expected, tol=1e-6)
 
 
+@wp.kernel
+def kernel_indexedarray_grad_2d_negative(samples: wp.indexedarray2d(dtype=float), total: wp.array(dtype=float)):
+    i, j = wp.tid()
+    # negative view coordinate on the gathered dimension wraps around before the remap
+    wp.atomic_add(total, 0, samples[i - 2, j])
+
+
+def test_indexedarray_grad_2d_negative_indices(test, device):
+    # each new 2-D/3-D/4-D adjoint overload hand-codes its own per-dimension wrap-around,
+    # so verify it against the forward read: a negative view coordinate wraps before the
+    # per-dimension index remap, same as the 1-D case in test_indexedarray_grad_1d_negative_indices
+    base = wp.array(np.arange(16, dtype=np.float32).reshape(4, 4), dtype=float, device=device, requires_grad=True)
+    rows = wp.array([1, 3], dtype=int, device=device)
+    samples = wp.indexedarray2d(base, [rows, None])
+    total = wp.zeros(1, dtype=float, device=device, requires_grad=True)
+
+    tape = wp.Tape()
+    with tape:
+        wp.launch(
+            kernel_indexedarray_grad_2d_negative, dim=samples.shape, inputs=[samples], outputs=[total], device=device
+        )
+
+    # samples[i - 2, j] wraps to samples[i, j], so the result matches test_indexedarray_grad_2d
+    assert_np_equal(total.numpy(), np.array([76.0], dtype=np.float32), tol=1e-6)
+
+    tape.backward(loss=total)
+
+    expected = np.zeros((4, 4), dtype=np.float32)
+    expected[[1, 3], :] = 1.0
+    assert_np_equal(base.grad.numpy(), expected, tol=1e-6)
+
+
 devices = get_test_devices()
 
 
@@ -1534,6 +1566,12 @@ add_function_test(
     devices=devices,
 )
 add_function_test(TestIndexedArray, "test_indexedarray_grad_2d", test_indexedarray_grad_2d, devices=devices)
+add_function_test(
+    TestIndexedArray,
+    "test_indexedarray_grad_2d_negative_indices",
+    test_indexedarray_grad_2d_negative_indices,
+    devices=devices,
+)
 add_function_test(TestIndexedArray, "test_indexedarray_grad_3d", test_indexedarray_grad_3d, devices=devices)
 add_function_test(TestIndexedArray, "test_indexedarray_grad_4d", test_indexedarray_grad_4d, devices=devices)
 add_function_test(TestIndexedArray, "test_indexedarray_2d", test_indexedarray_2d, devices=devices)
